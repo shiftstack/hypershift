@@ -52,7 +52,6 @@ func (a OpenStack) ReconcileCAPIInfraCR(ctx context.Context, client client.Clien
 
 	if _, err := createOrUpdate(ctx, client, openStackCluster, func() error {
 		reconcileOpenStackClusterSpec(hcluster, &openStackCluster.Spec)
-
 		return nil
 	}); err != nil {
 		return nil, err
@@ -126,7 +125,6 @@ func reconcileOpenStackClusterSpec(hcluster *hyperv1.HostedCluster, openStackClu
 			openStackClusterSpec.Network.Filter = createCAPONetworkFilter(openStackPlatform.Network.Filter)
 		}
 	}
-
 	if openStackPlatform.NetworkMTU != nil {
 		openStackClusterSpec.NetworkMTU = openStackPlatform.NetworkMTU
 	}
