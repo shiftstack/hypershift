@@ -18,9 +18,10 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	k8sutilspointer "k8s.io/utils/pointer"
 
-	capiopenstack "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
-	capiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	capo "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/openshift/hypershift/control-plane-operator/controllers/hostedcontrolplane/cloud/openstack"
 )
 
 type OpenStack struct {
@@ -39,31 +40,130 @@ func New(capiProviderImage string) *OpenStack {
 
 func (a OpenStack) ReconcileCAPIInfraCR(ctx context.Context, client client.Client, createOrUpdate upsert.CreateOrUpdateFN, hcluster *hyperv1.HostedCluster,
 	controlPlaneNamespace string, apiEndpoint hyperv1.APIEndpoint) (client.Object, error) {
-	openstackCluster := &capiopenstack.OpenStackCluster{
+	openStackCluster := &capo.OpenStackCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      hcluster.Name,
 			Namespace: controlPlaneNamespace,
 		},
 	}
-	openstackPlatform := hcluster.Spec.Platform.OpenStack
-	if openstackPlatform != nil {
-		openstackCluster.Spec.IdentityRef = capiopenstack.OpenStackIdentityReference{
-			Name:      openstackPlatform.CloudsYamlSecret.Name,
-			CloudName: cloudName,
-		}
+	openStackPlatform := hcluster.Spec.Platform.OpenStack
+	if openStackPlatform == nil {
+		return nil, fmt.Errorf("failed to reconcile OpenStack CAPI cluster. Empty OpenStack platform spec.")
 	}
 
-	if _, err := createOrUpdate(ctx, client, openstackCluster, func() error {
-		openstackCluster.Annotations = map[string]string{
-			capiv1.ManagedByAnnotation: "external",
-		}
-		// TODO(maysa): figure out why this is not being set on the object
-		openstackCluster.Status.Ready = true
+	openStackCluster.Spec.IdentityRef = capo.OpenStackIdentityReference(openStackPlatform.IdentityRef)
+
+	if _, err := createOrUpdate(ctx, client, openStackCluster, func() error {
+		reconcileOpenStackClusterSpec(hcluster, &openStackCluster.Spec)
+
 		return nil
 	}); err != nil {
 		return nil, err
 	}
-	return openstackCluster, nil
+	return openStackCluster, nil
+}
+
+func reconcileOpenStackClusterSpec(hcluster *hyperv1.HostedCluster, openStackClusterSpec *capo.OpenStackClusterSpec) {
+	openStackPlatform := hcluster.Spec.Platform.OpenStack
+	if len(openStackPlatform.Subnets) > 0 {
+		openStackClusterSpec.Subnets = make([]capo.SubnetParam, len(openStackPlatform.Subnets))
+		for i := range openStackPlatform.Subnets {
+			subnet := openStackPlatform.Subnets[i]
+			openStackClusterSpec.Subnets[i] = capo.SubnetParam{ID: subnet.ID}
+			subnetFilter := subnet.Filter
+			if subnetFilter != nil {
+				openStackClusterSpec.Subnets[i].Filter = &capo.SubnetFilter{
+					Name:                subnetFilter.Name,
+					Description:         subnetFilter.Description,
+					ProjectID:           subnetFilter.ProjectID,
+					IPVersion:           subnetFilter.IPVersion,
+					GatewayIP:           subnetFilter.GatewayIP,
+					CIDR:                subnetFilter.CIDR,
+					IPv6AddressMode:     subnetFilter.IPv6AddressMode,
+					IPv6RAMode:          subnetFilter.IPv6RAMode,
+					FilterByNeutronTags: createCAPOFilterTags(subnetFilter.Tags, subnetFilter.TagsAny, subnetFilter.NotTags, subnetFilter.NotTagsAny),
+				}
+			}
+		}
+	} else {
+		machineNetworks := hcluster.Spec.Networking.MachineNetwork
+		openStackClusterSpec.ManagedSubnets = make([]capo.SubnetSpec, len(machineNetworks))
+		// Only one Subnet is supported in CAPO
+		openStackClusterSpec.ManagedSubnets[0] = capo.SubnetSpec{
+			CIDR: hcluster.Spec.Networking.MachineNetwork[0].CIDR.String(),
+		}
+		for i := range openStackPlatform.ManagedSubnets {
+			openStackClusterSpec.ManagedSubnets[i].DNSNameservers = openStackPlatform.ManagedSubnets[i].DNSNameservers
+			allocationPools := openStackPlatform.ManagedSubnets[i].AllocationPools
+			openStackClusterSpec.ManagedSubnets[i].AllocationPools = make([]capo.AllocationPool, len(allocationPools))
+			for j := range allocationPools {
+				openStackClusterSpec.ManagedSubnets[i].AllocationPools[j] = capo.AllocationPool{
+					Start: allocationPools[j].Start,
+					End:   allocationPools[j].End,
+				}
+			}
+		}
+	}
+	if openStackPlatform.Router != nil {
+		openStackClusterSpec.Router = &capo.RouterParam{ID: openStackPlatform.Router.ID}
+		if openStackPlatform.Router.Filter != nil {
+			routerFilter := openStackPlatform.Router.Filter
+			openStackClusterSpec.Router.Filter = &capo.RouterFilter{
+				Name:                routerFilter.Name,
+				Description:         routerFilter.Description,
+				ProjectID:           routerFilter.ProjectID,
+				FilterByNeutronTags: createCAPOFilterTags(routerFilter.Tags, routerFilter.TagsAny, routerFilter.NotTags, routerFilter.NotTagsAny),
+			}
+
+		}
+	}
+	if openStackPlatform.Network != nil {
+		openStackClusterSpec.Network = &capo.NetworkParam{ID: openStackPlatform.Network.ID}
+		if openStackPlatform.Network.Filter != nil {
+			openStackClusterSpec.Network.Filter = createCAPONetworkFilter(openStackPlatform.Network.Filter)
+		}
+	}
+
+	if openStackPlatform.NetworkMTU != nil {
+		openStackClusterSpec.NetworkMTU = openStackPlatform.NetworkMTU
+	}
+	if openStackPlatform.ExternalNetwork != nil {
+		openStackClusterSpec.ExternalNetwork = &capo.NetworkParam{ID: openStackPlatform.ExternalNetwork.ID}
+		if openStackPlatform.ExternalNetwork.Filter != nil {
+			openStackClusterSpec.ExternalNetwork.Filter = createCAPONetworkFilter(openStackPlatform.ExternalNetwork.Filter)
+		}
+	}
+	if openStackPlatform.DisableExternalNetwork != nil {
+		openStackClusterSpec.DisableExternalNetwork = openStackPlatform.DisableExternalNetwork
+	}
+	openStackClusterSpec.ManagedSecurityGroups = &capo.ManagedSecurityGroups{}
+	openStackClusterSpec.Tags = openStackPlatform.Tags
+}
+
+func convertHypershiftTagToCAPOTag(tags []hyperv1.NeutronTag) []capo.NeutronTag {
+	var capoTags []capo.NeutronTag
+	for i := range tags {
+		capoTags = append(capoTags, capo.NeutronTag(tags[i]))
+	}
+	return capoTags
+}
+
+func createCAPOFilterTags(tags, tagsAny, NotTags, NotTagsAny []hyperv1.NeutronTag) capo.FilterByNeutronTags {
+	return capo.FilterByNeutronTags{
+		Tags:       convertHypershiftTagToCAPOTag(tags),
+		TagsAny:    convertHypershiftTagToCAPOTag(tagsAny),
+		NotTags:    convertHypershiftTagToCAPOTag(NotTags),
+		NotTagsAny: convertHypershiftTagToCAPOTag(NotTagsAny),
+	}
+}
+
+func createCAPONetworkFilter(filter *hyperv1.NetworkFilter) *capo.NetworkFilter {
+	return &capo.NetworkFilter{
+		Name:                filter.Name,
+		Description:         filter.Description,
+		ProjectID:           filter.ProjectID,
+		FilterByNeutronTags: createCAPOFilterTags(filter.Tags, filter.TagsAny, filter.NotTags, filter.NotTagsAny),
+	}
 }
 
 func (a OpenStack) CAPIProviderDeploymentSpec(hcluster *hyperv1.HostedCluster, _ *hyperv1.HostedControlPlane) (*appsv1.DeploymentSpec, error) {
@@ -147,44 +247,45 @@ func (a OpenStack) CAPIProviderDeploymentSpec(hcluster *hyperv1.HostedCluster, _
 
 func (a OpenStack) ReconcileCredentials(ctx context.Context, c client.Client, createOrUpdate upsert.CreateOrUpdateFN, hcluster *hyperv1.HostedCluster, controlPlaneNamespace string) error {
 	return errors.Join(
-		a.reconcileCloudsYaml(ctx, c, createOrUpdate, controlPlaneNamespace, hcluster.Namespace, hcluster.Spec.Platform.OpenStack.CloudsYamlSecret),
-		a.reconcileCACert(ctx, c, createOrUpdate, controlPlaneNamespace, hcluster.Namespace, hcluster.Spec.Platform.OpenStack.CACertSecret),
+		a.reconcileCloudsYaml(ctx, c, createOrUpdate, controlPlaneNamespace, hcluster.Namespace, hcluster.Spec.Platform.OpenStack.IdentityRef.Name),
+		a.reconcileCACert(ctx, c, createOrUpdate, controlPlaneNamespace, hcluster.Namespace, hcluster.Spec.Platform.OpenStack.IdentityRef.Name),
 	)
 }
 
-func (a OpenStack) reconcileCloudsYaml(ctx context.Context, c client.Client, createOrUpdate upsert.CreateOrUpdateFN, controlPlaneNamespace string, clusterNamespace string, cloudsYamlSecret corev1.LocalObjectReference) error {
+func (a OpenStack) reconcileCloudsYaml(ctx context.Context, c client.Client, createOrUpdate upsert.CreateOrUpdateFN, controlPlaneNamespace string, clusterNamespace string, identityRefName string) error {
 	var source corev1.Secret
 
 	// Sync user cloud.conf secret
-	name := client.ObjectKey{Namespace: clusterNamespace, Name: cloudsYamlSecret.Name}
+	name := client.ObjectKey{Namespace: clusterNamespace, Name: identityRefName}
 	if err := c.Get(ctx, name, &source); err != nil {
 		return fmt.Errorf("failed to get secret %s: %w", name, err)
 	}
 
-	clouds := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: controlPlaneNamespace, Name: cloudsYamlSecret.Name}}
+	clouds := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: controlPlaneNamespace, Name: identityRefName}}
 	_, err := createOrUpdate(ctx, c, clouds, func() error {
 		if clouds.Data == nil {
 			clouds.Data = map[string][]byte{}
 		}
 		clouds.Data["clouds.yaml"] = source.Data["clouds.yaml"] // TODO(emilien): Proper missing key handling.
 		clouds.Data["clouds.conf"] = source.Data["clouds.conf"] // TODO(emilien): Could we just generate this from clouds.yaml here?
+		if _, ok := source.Data["cacert"]; ok {
+			clouds.Data["cacert"] = source.Data["cacert"]
+		}
 		return nil
 	})
 
 	return err
 }
 
-func (a OpenStack) reconcileCACert(ctx context.Context, c client.Client, createOrUpdate upsert.CreateOrUpdateFN, controlPlaneNamespace string, clusterNamespace string, caCertSecret *corev1.LocalObjectReference) error {
-	if caCertSecret == nil {
-		return nil
+func (a OpenStack) reconcileCACert(ctx context.Context, c client.Client, createOrUpdate upsert.CreateOrUpdateFN, controlPlaneNamespace string, clusterNamespace string, secretName string) error {
+	credentialsSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: clusterNamespace, Name: secretName}}
+	if err := c.Get(ctx, client.ObjectKey{Namespace: clusterNamespace, Name: secretName}, credentialsSecret); err != nil {
+		return fmt.Errorf("failed to get secret %s: %w", secretName, err)
 	}
 
-	var source corev1.Secret
-
-	// TODO(emilien): Switch this to a ConfigMap
-	name := client.ObjectKey{Namespace: clusterNamespace, Name: caCertSecret.Name}
-	if err := c.Get(ctx, name, &source); err != nil {
-		return fmt.Errorf("failed to get secret %s: %w", name, err)
+	caCertData := openstack.GetCACertFromCredentialsSecret(credentialsSecret)
+	if caCertData == nil {
+		return nil
 	}
 
 	caCert := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: controlPlaneNamespace, Name: "openstack-ca"}}
@@ -192,7 +293,7 @@ func (a OpenStack) reconcileCACert(ctx context.Context, c client.Client, createO
 		if caCert.Data == nil {
 			caCert.Data = map[string][]byte{}
 		}
-		caCert.Data["ca.pem"] = source.Data["ca.pem"] // TODO(emilien): Proper missing key handling, naming.
+		caCert.Data["ca.pem"] = caCertData // TODO(emilien): Proper missing key handling, naming.
 		return nil
 	}); err != nil {
 		return err
