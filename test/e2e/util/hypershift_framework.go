@@ -20,6 +20,7 @@ import (
 	"github.com/openshift/hypershift/cmd/cluster/core"
 	"github.com/openshift/hypershift/cmd/cluster/kubevirt"
 	"github.com/openshift/hypershift/cmd/cluster/none"
+	"github.com/openshift/hypershift/cmd/cluster/openstack"
 	"github.com/openshift/hypershift/cmd/cluster/powervs"
 	hcmetrics "github.com/openshift/hypershift/hypershift-operator/controllers/hostedcluster/metrics"
 	"github.com/openshift/hypershift/hypershift-operator/controllers/manifests"
@@ -35,11 +36,12 @@ import (
 type PlatformAgnosticOptions struct {
 	core.RawCreateOptions
 
-	NonePlatform     none.RawCreateOptions
-	AWSPlatform      aws.RawCreateOptions
-	KubevirtPlatform kubevirt.RawCreateOptions
-	AzurePlatform    azure.RawCreateOptions
-	PowerVSPlatform  powervs.RawCreateOptions
+	NonePlatform      none.RawCreateOptions
+	AWSPlatform       aws.RawCreateOptions
+	KubevirtPlatform  kubevirt.RawCreateOptions
+	AzurePlatform     azure.RawCreateOptions
+	PowerVSPlatform   powervs.RawCreateOptions
+	OpenStackPlatform openstack.RawCreateOptions
 }
 
 type hypershiftTestFunc func(t *testing.T, g Gomega, mgtClient crclient.Client, hostedCluster *hyperv1.HostedCluster)
@@ -115,7 +117,8 @@ func (h *hypershiftTest) Execute(opts *PlatformAgnosticOptions, platform hyperv1
 // runs before each test.
 func (h *hypershiftTest) before(hostedCluster *hyperv1.HostedCluster, opts *PlatformAgnosticOptions, platform hyperv1.PlatformType) {
 	h.Run("ValidateHostedCluster", func(t *testing.T) {
-		if platform != hyperv1.NonePlatform {
+		// The OpenStack platform support is under development and is not yet ready for node pools
+		if platform != hyperv1.NonePlatform && platform != hyperv1.OpenStackPlatform {
 			if opts.AWSPlatform.EndpointAccess == string(hyperv1.Private) {
 				ValidatePrivateCluster(t, h.ctx, h.client, hostedCluster, opts)
 			} else {
