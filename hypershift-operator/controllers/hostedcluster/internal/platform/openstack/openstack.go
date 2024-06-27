@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	hyperv1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
+	"github.com/openshift/hypershift/api/util/ipnet"
 	"github.com/openshift/hypershift/support/images"
 	"github.com/openshift/hypershift/support/upsert"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -28,10 +29,6 @@ type OpenStack struct {
 	capiProviderImage string
 }
 
-const (
-	cloudName = "openstack"
-)
-
 func New(capiProviderImage string) *OpenStack {
 	return &OpenStack{
 		capiProviderImage: capiProviderImage,
@@ -48,7 +45,7 @@ func (a OpenStack) ReconcileCAPIInfraCR(ctx context.Context, client client.Clien
 	}
 	openStackPlatform := hcluster.Spec.Platform.OpenStack
 	if openStackPlatform == nil {
-		return nil, fmt.Errorf("failed to reconcile OpenStack CAPI cluster. Empty OpenStack platform spec.")
+		return nil, fmt.Errorf("failed to reconcile OpenStack CAPI cluster, empty OpenStack platform spec")
 	}
 
 	openStackCluster.Spec.IdentityRef = capo.OpenStackIdentityReference(openStackPlatform.IdentityRef)
@@ -86,11 +83,17 @@ func reconcileOpenStackClusterSpec(hcluster *hyperv1.HostedCluster, openStackClu
 			}
 		}
 	} else {
-		machineNetworks := hcluster.Spec.Networking.MachineNetwork
+		var machineNetworks []hyperv1.MachineNetworkEntry
+		if hcluster.Spec.Networking.MachineNetwork == nil || len(hcluster.Spec.Networking.MachineNetwork) == 0 {
+			// TODO(emilien): This is a temporary workaround until we have a better way to handle this.
+			machineNetworks = []hyperv1.MachineNetworkEntry{{CIDR: *ipnet.MustParseCIDR("10.200.0.0/24")}}
+		} else {
+			machineNetworks = hcluster.Spec.Networking.MachineNetwork
+		}
 		openStackClusterSpec.ManagedSubnets = make([]capo.SubnetSpec, len(machineNetworks))
 		// Only one Subnet is supported in CAPO
 		openStackClusterSpec.ManagedSubnets[0] = capo.SubnetSpec{
-			CIDR: hcluster.Spec.Networking.MachineNetwork[0].CIDR.String(),
+			CIDR: machineNetworks[0].CIDR.String(),
 		}
 		for i := range openStackPlatform.ManagedSubnets {
 			openStackClusterSpec.ManagedSubnets[i].DNSNameservers = openStackPlatform.ManagedSubnets[i].DNSNameservers
