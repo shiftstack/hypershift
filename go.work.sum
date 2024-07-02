@@ -465,6 +465,8 @@ sigs.k8s.io/aws-iam-authenticator v0.6.13/go.mod h1:CnvFyzR/xeLHmUY/BD0qW6q0wp6K
 sigs.k8s.io/cloud-provider-azure v1.29.3/go.mod h1:HtxxVO+zvNjzJpg3Dq3PAOuWsQoZ2cSjuy24lzry3hY=
 sigs.k8s.io/cloud-provider-azure/pkg/azclient v0.0.2/go.mod h1:JKWYkoOyET3wsN0Kk9WxA+zpopkuCy+v4+mrnJ60Yyk=
 sigs.k8s.io/cloud-provider-azure/pkg/azclient/configloader v0.0.1/go.mod h1:pPkJPx/eMVWP3R+LhPoOYGoY7lywcMJev5L2uSfH+Jo=
+sigs.k8s.io/cluster-api-provider-openstack v0.10.4 h1:mz7Ys57Qe905x08B5N13sjyAxWtyQbbWUtxp6+fdQuE=
+sigs.k8s.io/cluster-api-provider-openstack v0.10.4/go.mod h1:/3VAIzFoAxX77QykzyE6tnHD9aC8lYiQVKbfKPoX20w=
 sigs.k8s.io/cluster-api/test v1.7.1/go.mod h1:yG0g5Mdq73fMn9JP4akgRQPSne973L+Qx6iVH+LjtSM=
 sigs.k8s.io/controller-tools v0.11.3/go.mod h1:qcfX7jfcfYD/b7lAhvqAyTbt/px4GpvN88WKLFFv7p8=
 sigs.k8s.io/kind v0.22.0/go.mod h1:aBlbxg08cauDgZ612shr017/rZwqd7AS563FvpWKPVs=
