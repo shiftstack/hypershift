@@ -29,6 +29,7 @@ func bindCoreOptions(opts *RawCreateOptions, flags *pflag.FlagSet) {
 	flags.StringVar(&opts.OpenStackCACertFile, "openstack-ca-cert-file", opts.OpenStackCACertFile, "Path to the OpenStack CA certificate file (optional)")
 	flags.StringVar(&opts.OpenStackExternalNetworkName, "openstack-external-network-name", opts.OpenStackExternalNetworkName, "Name of the OpenStack external network (optional)")
 	flags.StringVar(&opts.OpenStackNodeFlavor, "openstack-node-flavor", opts.OpenStackNodeFlavor, "The flavor to use for OpenStack nodes")
+	flags.StringVar(&opts.OpenStackNodeImageName, "openstack-node-image-name", opts.OpenStackNodeImageName, "The image name to use for the nodepool (optional)")
 }
 
 type RawCreateOptions struct {
@@ -36,6 +37,7 @@ type RawCreateOptions struct {
 	OpenStackCACertFile          string
 	OpenStackExternalNetworkName string
 	OpenStackNodeFlavor          string
+	OpenStackNodeImageName       string
 
 	externalDNSDomain string
 }
@@ -146,7 +148,15 @@ func (o *RawCreateOptions) ApplyPlatformSpecifics(cluster *hyperv1.HostedCluster
 }
 
 func (o *RawCreateOptions) GenerateNodePools(constructor core.DefaultNodePoolConstructor) []*hyperv1.NodePool {
-	return nil
+	nodePool := constructor(hyperv1.OpenStackPlatform, "")
+	if nodePool.Spec.Management.UpgradeType == "" {
+		nodePool.Spec.Management.UpgradeType = hyperv1.UpgradeTypeReplace
+	}
+	nodePool.Spec.Platform.OpenStack = &hyperv1.OpenStackNodePoolPlatform{
+		Flavor:    o.OpenStackNodeFlavor,
+		ImageName: o.OpenStackNodeImageName,
+	}
+	return []*hyperv1.NodePool{nodePool}
 }
 
 func (o *CreateOptions) GenerateResources() ([]client.Object, error) {
