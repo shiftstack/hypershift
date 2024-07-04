@@ -69,6 +69,7 @@ func NewDestroyCommands() *cobra.Command {
 	cmd.AddCommand(kubevirt.NewDestroyCommand(opts))
 	cmd.AddCommand(azure.NewDestroyCommand(opts))
 	cmd.AddCommand(powervs.NewDestroyCommand(opts))
+	cmd.AddCommand(openstack.NewDestroyCommand(opts))
 
 	return cmd
 }
