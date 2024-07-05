@@ -63,12 +63,14 @@ func TestReconcileOpenStackCluster(t *testing.T) {
 					}}},
 				},
 				NetworkMTU:            ptr.To(1500),
-				ManagedSecurityGroups: &capo.ManagedSecurityGroups{},
 				ControlPlaneEndpoint: &capiv1.APIEndpoint{
 					Host: "api-endpoint",
 					Port: 6443,
 				},
 				DisableAPIServerFloatingIP: k8sutilspointer.BoolPtr(true),
+				ManagedSecurityGroups: &capo.ManagedSecurityGroups{
+					AllNodesSecurityGroupRules: defaultWorkerSecurityGroupRules([]string{"10.0.0.0/24"}),
+				},
 			}},
 		{
 			name: "User provided network and subnet by ID on hosted cluster",
@@ -103,12 +105,14 @@ func TestReconcileOpenStackCluster(t *testing.T) {
 				},
 				Subnets:               []capo.SubnetParam{{ID: ptr.To(subnetID)}},
 				Network:               &capo.NetworkParam{ID: ptr.To(networkID)},
-				ManagedSecurityGroups: &capo.ManagedSecurityGroups{},
 				ControlPlaneEndpoint: &capiv1.APIEndpoint{
 					Host: "api-endpoint",
 					Port: 6443,
 				},
 				DisableAPIServerFloatingIP: k8sutilspointer.BoolPtr(true),
+				ManagedSecurityGroups: &capo.ManagedSecurityGroups{
+					AllNodesSecurityGroupRules: defaultWorkerSecurityGroupRules([]string{"192.168.1.0/24"}),
+				},
 			},
 		},
 		{
@@ -156,12 +160,14 @@ func TestReconcileOpenStackCluster(t *testing.T) {
 							Tags: []capo.NeutronTag{"test"},
 						}},
 				},
-				ManagedSecurityGroups: &capo.ManagedSecurityGroups{},
 				ControlPlaneEndpoint: &capiv1.APIEndpoint{
 					Host: "api-endpoint",
 					Port: 6443,
 				},
 				DisableAPIServerFloatingIP: k8sutilspointer.BoolPtr(true),
+				ManagedSecurityGroups: &capo.ManagedSecurityGroups{
+					AllNodesSecurityGroupRules: defaultWorkerSecurityGroupRules([]string{"192.168.1.0/24"}),
+				},
 			},
 		},
 	}
