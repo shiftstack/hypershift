@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	credentialsSecretVolumeName = "openstack-credentials"
+	secretOCCMVolumeName = "secret-occm"
 )
 
 func ReconcileCCMServiceAccount(sa *corev1.ServiceAccount, ownerRef config.OwnerRef) error {
@@ -64,13 +64,13 @@ func addVolumes(deployment *appsv1.Deployment, hcp *hyperv1.HostedControlPlane) 
 		util.BuildVolume(ccmVolumeKubeconfig(), buildCCMVolumeKubeconfig),
 		util.BuildVolume(ccmCloudConfig(), buildCCMCloudConfig),
 		corev1.Volume{
-			Name: credentialsSecretVolumeName,
+			Name: secretOCCMVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: hcp.Spec.Platform.OpenStack.IdentityRef.Name,
 					Items: []corev1.KeyToPath{{
-						Key:  "clouds.yaml",
-						Path: "clouds.yaml",
+						Key:  CloudsSecretKey,
+						Path: CloudsSecretKey,
 					}},
 				},
 			},
@@ -133,7 +133,7 @@ func buildCCMContainer(controllerManagerImage, infraID string) func(c *corev1.Co
 				ReadOnly:  true,
 			},
 			{
-				Name:      credentialsSecretVolumeName,
+				Name:      secretOCCMVolumeName,
 				MountPath: CloudCredentialsDir,
 				ReadOnly:  true,
 			},
@@ -148,8 +148,14 @@ func buildCCMVolumeKubeconfig(v *corev1.Volume) {
 }
 
 func buildCCMCloudConfig(v *corev1.Volume) {
-	v.Secret = &corev1.SecretVolumeSource{
-		SecretName: manifests.OpenStackProviderConfig("").Name,
+	v.ConfigMap = &corev1.ConfigMapVolumeSource{
+		LocalObjectReference: corev1.LocalObjectReference{Name: manifests.OpenStackProviderConfig("").Name},
+		Items: []corev1.KeyToPath{
+			{
+				Key:  CredentialsFile,
+				Path: CredentialsFile,
+			},
+		},
 	}
 }
 
@@ -158,8 +164,8 @@ func buildCCMTrustedCA(v *corev1.Volume) {
 		LocalObjectReference: corev1.LocalObjectReference{Name: manifests.OpenStackTrustedCA("").Name},
 		Items: []corev1.KeyToPath{
 			{
-				Key:  CaKey,
-				Path: CaKey,
+				Key:  CABundleKey,
+				Path: CABundleKey,
 			},
 		},
 	}
