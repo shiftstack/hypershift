@@ -8,6 +8,7 @@ import (
 	hyperv1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
 	"github.com/openshift/hypershift/control-plane-operator/controllers/hostedcontrolplane/cloud/aws"
 	"github.com/openshift/hypershift/control-plane-operator/controllers/hostedcontrolplane/cloud/azure"
+	"github.com/openshift/hypershift/control-plane-operator/controllers/hostedcontrolplane/cloud/openstack"
 	"github.com/openshift/hypershift/control-plane-operator/controllers/hostedcontrolplane/imageprovider"
 	"github.com/openshift/hypershift/control-plane-operator/controllers/hostedcontrolplane/manifests"
 	"github.com/openshift/hypershift/control-plane-operator/controllers/hostedcontrolplane/pki"
@@ -269,6 +270,9 @@ func NewKubeAPIServerParams(ctx context.Context, hcp *hyperv1.HostedControlPlane
 	case hyperv1.AzurePlatform:
 		params.CloudProvider = azure.Provider
 		params.CloudProviderConfig = &corev1.LocalObjectReference{Name: manifests.AzureProviderConfigWithCredentials("").Name}
+	case hyperv1.OpenStackPlatform:
+		params.CloudProvider = openstack.Provider
+		params.CloudProviderConfig = &corev1.LocalObjectReference{Name: manifests.OpenStackProviderConfigWithCredentials("").Name}
 	}
 
 	if hcp.Spec.Platform.Type == hyperv1.IBMCloudPlatform {
