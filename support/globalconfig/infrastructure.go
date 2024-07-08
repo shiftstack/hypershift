@@ -10,7 +10,6 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	hyperv1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
-	supportutil "github.com/openshift/hypershift/support/util"
 )
 
 func InfrastructureConfig() *configv1.Infrastructure {
@@ -87,11 +86,9 @@ func ReconcileInfrastructure(infra *configv1.Infrastructure, hcp *hyperv1.Hosted
 		infra.Spec.PlatformSpec.OpenStack = &configv1.OpenStackPlatformSpec{}
 		infra.Status.PlatformStatus.OpenStack = &configv1.OpenStackPlatformStatus{
 			CloudName:            "openstack",
-			APIServerInternalIPs: supportutil.IPsToStrings(infra.Spec.PlatformSpec.OpenStack.APIServerInternalIPs),
-			IngressIPs:           supportutil.IPsToStrings(infra.Spec.PlatformSpec.OpenStack.IngressIPs),
-			LoadBalancer:         &configv1.OpenStackPlatformLoadBalancer{Type: configv1.LoadBalancerTypeOpenShiftManagedDefault},
-			NodeDNSIP:            "", // TODO(emilien) not sure about this one
-			MachineNetworks:      infra.Spec.PlatformSpec.OpenStack.MachineNetworks,
+			LoadBalancer:         &configv1.OpenStackPlatformLoadBalancer{Type: configv1.LoadBalancerTypeUserManaged},
+			APIServerInternalIPs: []string{},
+			IngressIPs:           []string{},
 		}
 	}
 }
