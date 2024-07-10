@@ -39,7 +39,7 @@ func ReconcileDeployment(deployment *appsv1.Deployment, hcp *hyperv1.HostedContr
 			},
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
-					util.BuildContainer(ccmContainer(), buildCCMContainer(releaseImageProvider.GetImage("openstack-cloud-controller-manager"))),
+					util.BuildContainer(ccmContainer(), buildCCMContainer(releaseImageProvider.GetImage("openstack-cloud-controller-manager"), hcp.Spec.InfraID)),
 				},
 				Volumes:            []corev1.Volume{},
 				ServiceAccountName: serviceAccountName,
@@ -68,6 +68,10 @@ func addVolumes(deployment *appsv1.Deployment, hcp *hyperv1.HostedControlPlane) 
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: hcp.Spec.Platform.OpenStack.IdentityRef.Name,
+					Items: []corev1.KeyToPath{{
+						Key:  "clouds.yaml",
+						Path: "clouds.yaml",
+					}},
 				},
 			},
 		},
@@ -88,13 +92,14 @@ func addCACert(deployment *appsv1.Deployment) {
 	})
 }
 
-func buildCCMContainer(controllerManagerImage string) func(c *corev1.Container) {
+func buildCCMContainer(controllerManagerImage, infraID string) func(c *corev1.Container) {
 	return func(c *corev1.Container) {
 		c.Image = controllerManagerImage
 		c.Command = []string{"/usr/bin/openstack-cloud-controller-manager"}
 		c.Args = []string{
 			"--v=1",
-			"--cloud-config=" + CloudConfigDir + "/" + CredentialsFile,
+			"--cloud-config=$(CLOUD_CONFIG)",
+			"--cluster-name=$(OCP_INFRASTRUCTURE_NAME)",
 			"--kubeconfig=/etc/kubernetes/kubeconfig/kubeconfig",
 			"--cloud-provider=openstack",
 			"--use-service-account-credentials=false",
@@ -105,6 +110,16 @@ func buildCCMContainer(controllerManagerImage string) func(c *corev1.Container) 
 			fmt.Sprintf("--leader-elect-renew-deadline=%s", config.RecommendedRenewDeadline),
 			fmt.Sprintf("--leader-elect-retry-period=%s", config.RecommendedRetryPeriod),
 			"--leader-elect-resource-namespace=openshift-cloud-controller-manager",
+		}
+		c.Env = []corev1.EnvVar{
+			{
+				Name:  "CLOUD_CONFIG",
+				Value: CloudConfigDir + "/" + CredentialsFile,
+			},
+			{
+				Name:  "OCP_INFRASTRUCTURE_NAME",
+				Value: infraID,
+			},
 		}
 		c.VolumeMounts = []corev1.VolumeMount{
 			{
