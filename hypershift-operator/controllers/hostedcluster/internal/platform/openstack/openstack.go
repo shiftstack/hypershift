@@ -20,6 +20,7 @@ import (
 	k8sutilspointer "k8s.io/utils/pointer"
 
 	capo "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
+	capiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openshift/hypershift/control-plane-operator/controllers/hostedcontrolplane/cloud/openstack"
@@ -51,7 +52,7 @@ func (a OpenStack) ReconcileCAPIInfraCR(ctx context.Context, client client.Clien
 	openStackCluster.Spec.IdentityRef = capo.OpenStackIdentityReference(openStackPlatform.IdentityRef)
 
 	if _, err := createOrUpdate(ctx, client, openStackCluster, func() error {
-		reconcileOpenStackClusterSpec(hcluster, &openStackCluster.Spec)
+		reconcileOpenStackClusterSpec(hcluster, &openStackCluster.Spec, apiEndpoint)
 		return nil
 	}); err != nil {
 		return nil, err
@@ -59,8 +60,14 @@ func (a OpenStack) ReconcileCAPIInfraCR(ctx context.Context, client client.Clien
 	return openStackCluster, nil
 }
 
-func reconcileOpenStackClusterSpec(hcluster *hyperv1.HostedCluster, openStackClusterSpec *capo.OpenStackClusterSpec) {
+func reconcileOpenStackClusterSpec(hcluster *hyperv1.HostedCluster, openStackClusterSpec *capo.OpenStackClusterSpec, apiEndpoint hyperv1.APIEndpoint) {
 	openStackPlatform := hcluster.Spec.Platform.OpenStack
+
+	openStackClusterSpec.ControlPlaneEndpoint = &capiv1.APIEndpoint{
+		Host: apiEndpoint.Host,
+		Port: apiEndpoint.Port,
+	}
+
 	if len(openStackPlatform.Subnets) > 0 {
 		openStackClusterSpec.Subnets = make([]capo.SubnetParam, len(openStackPlatform.Subnets))
 		for i := range openStackPlatform.Subnets {
@@ -138,6 +145,7 @@ func reconcileOpenStackClusterSpec(hcluster *hyperv1.HostedCluster, openStackClu
 		openStackClusterSpec.DisableExternalNetwork = openStackPlatform.DisableExternalNetwork
 	}
 	openStackClusterSpec.ManagedSecurityGroups = &capo.ManagedSecurityGroups{}
+	openStackClusterSpec.DisableAPIServerFloatingIP = k8sutilspointer.BoolPtr(true)
 	openStackClusterSpec.Tags = openStackPlatform.Tags
 }
 
