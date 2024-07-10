@@ -7,7 +7,7 @@ import (
 
 const (
 	CloudConfigDir      = "/etc/openstack/config"
-	CloudCredentialsDir = "/etc/openstack/credentials"
+	CloudCredentialsDir = "/etc/openstack"
 	CredentialsFile     = "clouds.conf"
 	CaDir               = "/etc/pki/ca-trust/extracted/pem"
 	CaKey               = "ca.pem"
@@ -26,7 +26,7 @@ func ReconcileCloudConfig(secret *corev1.Secret, hcp *hyperv1.HostedControlPlane
 	config += `
 [Global]
 use-clouds=true
-clouds-file=` + CloudCredentialsDir + "/" + CredentialsFile + "\n"
+clouds-file=` + CloudCredentialsDir + "/" + cloudsSecretKey + "\n"
 
 	config += "\ncloud=" + hcp.Spec.Platform.OpenStack.IdentityRef.CloudName
 
