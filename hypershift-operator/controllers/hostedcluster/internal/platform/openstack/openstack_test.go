@@ -5,16 +5,22 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	hyperv1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
+	k8sutilspointer "k8s.io/utils/pointer"
 	"k8s.io/utils/ptr"
 
 	"github.com/openshift/hypershift/api/util/ipnet"
 	capo "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
+	capiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 )
 
 func TestReconcileOpenStackCluster(t *testing.T) {
 	const externalNetworkID = "a42211a2-4d2c-426f-9413-830e4b4abbbc"
 	const networkID = "803084c1-70a2-44d3-a484-3b9c08dedee0"
 	const subnetID = "e08dd45e-1bce-42c7-a5a9-3f7e1e55640e"
+	apiEndpoint := hyperv1.APIEndpoint{
+		Host: "api-endpoint",
+		Port: 6443,
+	}
 	testCases := []struct {
 		name                         string
 		hostedCluster                *hyperv1.HostedCluster
@@ -58,6 +64,11 @@ func TestReconcileOpenStackCluster(t *testing.T) {
 				},
 				NetworkMTU:            ptr.To(1500),
 				ManagedSecurityGroups: &capo.ManagedSecurityGroups{},
+				ControlPlaneEndpoint: &capiv1.APIEndpoint{
+					Host: "api-endpoint",
+					Port: 6443,
+				},
+				DisableAPIServerFloatingIP: k8sutilspointer.BoolPtr(true),
 			}},
 		{
 			name: "User provided network and subnet by ID on hosted cluster",
@@ -93,6 +104,11 @@ func TestReconcileOpenStackCluster(t *testing.T) {
 				Subnets:               []capo.SubnetParam{{ID: ptr.To(subnetID)}},
 				Network:               &capo.NetworkParam{ID: ptr.To(networkID)},
 				ManagedSecurityGroups: &capo.ManagedSecurityGroups{},
+				ControlPlaneEndpoint: &capiv1.APIEndpoint{
+					Host: "api-endpoint",
+					Port: 6443,
+				},
+				DisableAPIServerFloatingIP: k8sutilspointer.BoolPtr(true),
 			},
 		},
 		{
@@ -141,6 +157,11 @@ func TestReconcileOpenStackCluster(t *testing.T) {
 						}},
 				},
 				ManagedSecurityGroups: &capo.ManagedSecurityGroups{},
+				ControlPlaneEndpoint: &capiv1.APIEndpoint{
+					Host: "api-endpoint",
+					Port: 6443,
+				},
+				DisableAPIServerFloatingIP: k8sutilspointer.BoolPtr(true),
 			},
 		},
 	}
@@ -153,7 +174,7 @@ func TestReconcileOpenStackCluster(t *testing.T) {
 					CloudName: "openstack",
 				},
 			}
-			reconcileOpenStackClusterSpec(tc.hostedCluster, &initialOpenStackClusterSpec)
+			reconcileOpenStackClusterSpec(tc.hostedCluster, &initialOpenStackClusterSpec, apiEndpoint)
 			if diff := cmp.Diff(initialOpenStackClusterSpec, tc.expectedOpenStackClusterSpec); diff != "" {
 				t.Errorf("reconciled OpenStack cluster spec differs from expcted OpenStack cluster spec: %s", diff)
 			}
