@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/openshift/hypershift/cmd/util"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -66,14 +68,10 @@ type CreateOptions struct {
 }
 
 func (o *RawCreateOptions) Validate(ctx context.Context, opts *core.CreateOptions) (core.PlatformCompleter, error) {
-	// Check that the OpenStack credentials file arg is set and that the file exists
-	if o.OpenStackCredentialsFile == "" {
-		return nil, fmt.Errorf("OpenStack credentials file is required")
+	// Check that the OpenStack credentials file arg is set and that the file exists with the "openstack" cloud
+	if err := validateOpenStackCredentialsFile(o.OpenStackCredentialsFile); err != nil {
+		return nil, fmt.Errorf("OpenStack credentials file is invalid: %w", err)
 	}
-	if _, err := os.Stat(o.OpenStackCredentialsFile); err != nil {
-		return nil, fmt.Errorf("OpenStack credentials file does not exist: %w", err)
-	}
-	// TODO(emilien) we will probably have to check the cloud name here ("openstack" by default?)
 
 	return &ValidatedCreateOptions{
 		validatedCreateOptions: &validatedCreateOptions{
@@ -224,4 +222,34 @@ func NewCreateCommand(opts *core.RawCreateOptions) *cobra.Command {
 	}
 
 	return cmd
+}
+
+// validateOpenStackCredentialsFile checks that the OpenStack credentials file exists
+// and that the cloud name is "openstack" which we hardcode for now.
+func validateOpenStackCredentialsFile(credentialsFile string) error {
+	if credentialsFile == "" {
+		return fmt.Errorf("OpenStack credentials file is required")
+	}
+
+	if _, err := os.Stat(credentialsFile); err != nil {
+		return fmt.Errorf("OpenStack credentials file does not exist: %w", err)
+	}
+
+	cloudsFile, err := os.ReadFile(credentialsFile)
+	if err != nil {
+		return fmt.Errorf("failed to read OpenStack credentials file: %w", err)
+	}
+	clouds := make(map[string]interface{})
+	if err := yaml.Unmarshal(cloudsFile, &clouds); err != nil {
+		return fmt.Errorf("failed to parse OpenStack credentials file: %w", err)
+	}
+	_, ok := clouds["clouds"]
+	if !ok {
+		return fmt.Errorf("'clouds' key not found in credentials file")
+	}
+	clouds = clouds["clouds"].(map[string]interface{})
+	if _, ok := clouds["openstack"]; !ok {
+		return fmt.Errorf("'openstack' cloud not found in credentials file")
+	}
+	return nil
 }
