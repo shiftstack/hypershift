@@ -1504,7 +1504,7 @@ func (r *reconciler) reconcileCloudCredentialSecrets(ctx context.Context, hcp *h
 }
 
 // reconcileOpenStackCredentialsSecret is a wrapper used to reconcile the OpenStack cloud config secrets.
-func (r *reconciler) reconcileOpenStackCredentialsSecret(ctx context.Context, name, namespace string, credentialsSecret *corev1.Secret, cloudName string, caCertData []byte) error {
+func (r *reconciler) reconcileOpenStackCredentialsSecret(ctx context.Context, namespace, name string, credentialsSecret *corev1.Secret, cloudName string, caCertData []byte) error {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
