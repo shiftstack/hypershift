@@ -941,11 +941,50 @@ func (r *reconciler) reconcileIngressController(ctx context.Context, hcp *hyperv
 
 		// At this point validations have passed, so we can proceed with the reconciliation
 		if ingressProvider == hyperv1.OpenStackIngressProviderOctavia {
-			ingressDefaultIngressOctaviaService := manifests.IngressDefaultIngressOctaviaService()
-			if _, err := r.CreateOrUpdate(ctx, r.client, ingressDefaultIngressOctaviaService, func() error {
-				return ingress.ReconcileDefaultIngressOctaviaService(ingressDefaultIngressOctaviaService, ingressFloatingIP)
-			}); err != nil {
-				errs = append(errs, fmt.Errorf("failed to reconcile default ingress octavia service: %w", err))
+			if ingressFloatingIP != "" {
+				// XXX: Specifying an ingress floating IP does not prevent the
+				// default ingress being created with its own floating IP, so using
+				// this feature creates an additional, unusued floating IP.
+				ingressDefaultIngressOctaviaService := manifests.IngressDefaultIngressOctaviaService()
+				if _, err := r.CreateOrUpdate(ctx, r.client, ingressDefaultIngressOctaviaService, func() error {
+					return ingress.ReconcileDefaultIngressOctaviaService(ingressDefaultIngressOctaviaService, ingressFloatingIP)
+				}); err != nil {
+					errs = append(errs, fmt.Errorf("failed to reconcile default ingress octavia service: %w", err))
+				}
+			}
+
+			err := func() error {
+				// Get router-default service from workload cluster
+				routerDefault := corev1.Service{}
+				routerDefault.Name = "router-default"
+				routerDefault.Namespace = "openshift-ingress"
+
+				err := r.client.Get(ctx, client.ObjectKey{Namespace: "openshift-ingress", Name: "router-default"}, &routerDefault)
+				if err != nil {
+					// It is not an error if the default router has not been
+					// created, yet. We will be reconciled again later when it
+					// is created.
+					if apierrors.IsNotFound(err) {
+						return nil
+					}
+					return err
+				}
+
+				var ingressIPs []string
+				for i := range routerDefault.Status.LoadBalancer.Ingress {
+					ingress := &routerDefault.Status.LoadBalancer.Ingress[i]
+					if ingress.IP != "" {
+						ingressIPs = append(ingressIPs, ingress.IP)
+					}
+				}
+
+				// TODO: Create an ExternalName service in the management
+				// cluster for the discovered IP address of the workload
+				// cluster's ingress service.
+				ingressExternalName := corev1.Service{}
+			}
+			if err != nil {
+				errs = append(errs, fmt.Errorf("failed to "))
 			}
 		}
 	}
